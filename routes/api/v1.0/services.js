@@ -2,15 +2,31 @@ var express = require('express');
 var multer = require('multer');
 var router = express.Router();
 var fs = require('fs');
-//var _ = require("underscore");
-var Home = require("../../../database/collections/homes");
-var Img = require("../../../database/collections/img");
+var _ = require("underscore");
+var RESTAURANT = require("../../../database/collections/restaurant");
+var MENUS = require("../../../database/collections/menus");
+var CLIENT= require("../../../database/collections/client");
 
 var jwt = require("jsonwebtoken");
 
 
 var storage = multer.diskStorage({
-  destination: "./public/avatars",
+  destination: "./public/restaurants",
+  filename: function (req, file, cb) {
+    console.log("-------------------------");
+    console.log(file);
+    cb(null, "IMG_" + Date.now() + ".jpg");
+  }
+});
+
+// logo multer
+
+var upload = multer({
+  storage: storage
+}).single("img");;
+
+var logostorage = multer.diskStorage({
+  destination: "./public/logorestaurants",
   filename: function (req, file, cb) {
     console.log("-------------------------");
     console.log(file);
@@ -18,13 +34,27 @@ var storage = multer.diskStorage({
   }
 });
 var upload = multer({
-  storage: storage
-}).single("img");;
+  storage: logostorage
+}).single("logo");
+
+// picture menus
+
+var fotostorage = multer.diskStorage({
+  destination: "./public/picturemenus",
+  filename: function (req, file, cb) {
+    console.log("-------------------------");
+    console.log(file);
+    cb(null, "IMG_" + Date.now() + ".jpg");
+  }
+});
+var upload = multer({
+  storage: fotostorage
+}).single("menu");
 
 /*
 Login USER
 */
-router.post("/login", (req, res, next) => {
+router.post("/loginhomes", (req, res, next) => {
   var username = req.body.username;
   var password = req.body.password;
   var result = Home.findOne({name: username,password: password}).exec((err, doc) => {
@@ -293,4 +323,562 @@ router.put(/home\/[a-z0-9]{1,}$/, verifytoken,(req, res) => {
       return;
   });
 });
+
+
+
+//API RESTARANT AQUI COMIENZA /////////////////////////////////////////////////
+ // registro de cliente
+
+// Login clientes
+
+router.post("/login", (req, res, next) => {
+  var email = req.body.email;
+  var password = req.body.password;
+  var result = CLIENT.findOne({email: email,password: password}).exec((err, doc) => {
+    if (err) {
+      res.status(200).json({
+        msn : "No se puede concretar con la peticion "
+      });
+      return;
+    }
+    if (doc) {
+      //res.status(200).json(doc);
+      jwt.sign({name: doc.email, password: doc.password}, "secretkey123", (err, token) => {
+          console.log(err);
+          res.status(200).json({
+            token : token
+          });
+      })
+    } else {
+      res.status(200).json({
+        msn : "El usuario no existe en la base de datos"
+      });
+    }
+  });
+});
+ // registrar restaurant
+router.post("/restaurant",verifytoken ,(req, res) =>{
+var data = req.body;
+if (req.body.name == "" && req.body.nit == "" && req.body.street ==""){
+  res.status(400).json({
+    "msn" : "incorrecto"
+  });
+  return;
+}
+data["registerdate"] = new Date();
+//realizar validacion y seguridad
+var newrestaurant = new RESTAURANT(data);
+  newrestaurant.save().then( (rr) => {
+    //content-type
+    res.status(200).json({
+      "id" : rr._id,
+      "msn" : "restaurante agragado con exito "
+    });
+  });
+});
+// mostrar todo los restaurantes
+router.get("/restaurant",verifytoken ,(req, res) => {
+  var skip = 0;
+  var limit = 10;
+  if (req.query.skip != null) {
+    skip = req.query.skip;
+  }
+  if (req.query.limit != null) {
+    limit = req.query.limit;
+  }
+RESTAURANT.find({}).skip(skip).limit(limit).exec((err, docs) => {
+if (err) {
+          res.status(500).json({
+            "msn" : "Error en la base de datos"
+          });
+          return;
+        }
+res.status(200).json(docs);
+});
+});
+// mostrar solo un restaurant
+
+router.get(/\/restaurant\/[a-z0-9]{1,}$/,verifytoken,(req, res)=>{
+var url =req.url;
+var id = url.split("/")[2];
+RESTARANT.findOne({_id: id}).exec( (error, docs)=>{
+  if (docs != null) {
+    res.status(200).json(docs);
+    return;
+  }
+  res.status(404).json({
+    "msn" : " no existe el recurso"
+  });
+})
+});
+
+// eliminar restaurantes
+
+router.delete(/\/restaurant\/[a-z0-9]{1,}$/,verifytoken,(req, res)=>{
+var url =req.url;
+var id = url.split("/")[2];
+RESTARANT.find({_id: id}).remove().exec( (error, docs)=>{
+      res.status(200).json(docs);
+     });
+});
+// actualizar todo los objetos del restaurante
+router.put(/restaurant\/[a-z0-9]{1,}$/, verifytoken,(req, res) => {
+  var url = req.url;
+  var id = url.split("/")[2];
+  var keys = Object.keys(req.body);
+  var oficialkeys = ['name','nit', 'property', 'street', 'phone', 'log', 'lat'];
+  var result = _.difference(oficialkeys, keys);
+  if (result.length > 0){
+    res.status(400).json({
+      "msn" : "existe un error en el formato, use path si decia editar solo un fragmiento"
+    });
+    return;
+  }
+  var user = {
+    name : req.body.name,
+    nit : req.body.nit,
+    property : req.body.property,
+    street : req.body.street,
+    phone : req.body.phone,
+    log : req.body.log,
+    Lat : req.body.lat,
+  };
+  RESTAURANT.findOneAndUpdate({_id: id}, user, (err, params)=>{
+    if(err){
+      res.status(500).json({
+        "msn" : "error no se pudo actualizar los datos"
+      });
+      return;
+    }
+    res.status(200).json(params);
+  });
+});
+
+//coleccion de datos actualizacion
+router.patch("/restaurant",verifytoken ,(req, res) =>{
+  var url = req.url;
+  var params = req.body;
+  var id = req.query.id;
+
+  var keys = Object.keys(params);
+  var updatekeys = ["name", "nit", "property", "street", "phone", "Log", "Lat", "logo", "picture"];
+  var newkeys = [];
+  var values = [];
+  //seguridad
+  for (var i = 0; i < updatekeys.length; i++){
+    var index = keys.indexOf(updatekeys[i]);
+    if (index != -1) {
+      newkeys.push(keys[index]);
+      values.push(params[keys[index]]);
+    }
+  }
+  var objupdate = {}
+  for (var i = 0; i < newkeys.length; i++) {
+      objupdate[newkeys[i]] = values[i];
+  }
+  console.log(objupdate);
+  RESTAURANT.findOneAndUpdate({_id: id}, objupdate, (err, docs) => {
+    if (err) {
+      res.status(500)-json({
+        msn: "existe un error en la base de datos"
+      });
+      return;
+    }
+    var id = docs._id
+    res.status(200).json({
+      "msn": id
+    })
+  });
+
+});
+//suvir la imagen
+
+router.post("/uploadrestaurant",verifytoken , (req, res) => {
+  var params = req.query;
+  var id = params.id;
+  var SUPERES = res;
+  RESTAURANT.findOne({_id: id}).exec((err, docs) => {
+    if (err) {
+      res.status(501).json({
+        "msn" : "problemas con la base de datos"
+      });
+      return;
+    }
+    if (docs != undefined){
+      upload(req, res, (err) => {
+        if (err) {
+          res.status(500).json({
+            "msn" : "Error al subir la imagen"
+          });
+          return;
+        }
+        var url = req.file.path.replace(/public/g, "");
+
+        RESTAURANT.update({_id: id}, {$set:{picture:url}}, (err, docs) => {
+          if (err) {
+            res.status(200).json({
+              "mns" : err
+            });
+            return;
+          }
+          res.status(200).json(docs);
+        });
+      });
+    }
+  });
+});
+
+// subir logo del restaurantes
+
+router.post("/logorestaurants", verifytoken, (req, res) => {
+  var params = req.query;
+  var id     = params.id;
+  RESTAURANT.findOne({_id: id}).exec((err, docs) =>{
+    if (err) {
+      res.status(501).json({
+        "msn" : "Problema con la base de datos."
+      });
+      return;
+    }
+    if (docs != undefined) {
+      upload(req, res, (err) => {
+        if (err) {
+          res.status(500).json({
+            "msn" : "Error al subir la imagen."
+          });
+        }
+        var url = req.file.path.replace(/public/g, "");
+
+        RESTAURANT.update({_id: id}, {$set:{logo:url}}, (err, docs) => {
+          if(err) {
+            res.status(200).json({
+              "msn" : err
+            });
+          }
+          res.status(200).json(docs);
+        });
+      });
+    }
+  });
+});
+
+// clientes/////////////////////////////////////////////////
+
+router.post("/client", (req, res) => {
+ var client = req.body;
+
+ //validar datos
+ if (req.body.name == "" && req.body.email == "" && req.body.ci == "" && req.body.password == "") {
+   res.status(400).json({
+     "msn" : "Formato incorrecto"
+   });
+   return;
+}
+ client["registerdate"] = new Date();
+ var cli = new CLIENT(client);
+ cli.save().then((docs) => {
+  res.status(200).json(docs);
+ });
+});
+
+// actualizar todo los objetos del clientes
+router.put(/client\/[a-z0-9]{1,}$/, verifytoken,(req, res) => {
+  var url = req.url;
+  var id = url.split("/")[2];
+  var keys = Object.keys(req.body);
+  var oficialkeys = ['name','email', 'ci', 'phone', 'password'];
+  var result = _.difference(oficialkeys, keys);
+  if (result.length > 0){
+    res.status(400).json({
+      "msn" : "existe un error en el formato, use path si decia editar solo un fragmiento"
+    });
+    return;
+  }
+  var user = {
+    name : req.body.name,
+    email : req.body.email,
+    ci : req.body.ci,
+    phone : req.body.phone,
+    password : req.body.password,
+
+  };
+  CLIENT.findOneAndUpdate({_id: id}, user, (err, params)=>{
+    if(err){
+      res.status(500).json({
+        "msn" : "error no se pudo actualizar los datos"
+      });
+      return;
+    }
+    res.status(200).json(params);
+  });
+});
+
+//coleccion de datos actualizacion
+router.patch("/client",verifytoken ,(req, res) =>{
+  var url = req.url;
+  var params = req.body;
+  var id = req.query.id;
+
+  var keys = Object.keys(params);
+  var updatekeys = ["name", "email", "phone","ci",  "password"];
+  var newkeys = [];
+  var values = [];
+  //seguridad
+  for (var i = 0; i < updatekeys.length; i++){
+    var index = keys.indexOf(updatekeys[i]);
+    if (index != -1) {
+      newkeys.push(keys[index]);
+      values.push(params[keys[index]]);
+    }
+  }
+  var objupdate = {}
+  for (var i = 0; i < newkeys.length; i++) {
+      objupdate[newkeys[i]] = values[i];
+  }
+  console.log(objupdate);
+  CLIENT.findOneAndUpdate({_id: id}, objupdate, (err, docs) => {
+    if (err) {
+      res.status(500)-json({
+        msn: "existe un error en la base de datos"
+      });
+      return;
+    }
+    var id = docs._id
+    res.status(200).json({
+      "msn": id
+    });
+  });
+
+});
+
+// mostrar todo los clientes
+router.get("/client",verifytoken ,(req, res) => {
+  var skip = 0;
+  var limit = 10;
+  if (req.query.skip != null) {
+    skip = req.query.skip;
+  }
+  if (req.query.limit != null) {
+    limit = req.query.limit;
+  }
+CLIENT.find({}).skip(skip).limit(limit).exec((err, docs) => {
+if (err) {
+          res.status(500).json({
+            "msn" : "Error en la base de datos"
+          });
+          return;
+        }
+res.status(200).json(docs);
+});
+});
+// mostrar solo un cliente
+
+router.get(/\/client\/[a-z0-9]{1,}$/,verifytoken,(req, res)=>{
+var url =req.url;
+var id = url.split("/")[2];
+CLIENT.findOne({_id: id}).exec( (error, docs)=>{
+  if (docs != null) {
+    res.status(200).json(docs);
+    return;
+  }
+  res.status(404).json({
+    "msn" : " no existe el cliente"
+  });
+})
+});
+
+// eliminar
+
+router.delete(/\/client\/[a-z0-9]{1,}$/,verifytoken,(req, res)=>{
+var url =req.url;
+var id = url.split("/")[2];
+CLIENT.find({_id: id}).remove().exec( (error, docs)=>{
+  if (docs != null) {
+    res.status(200).json(docs);
+    return;
+  }
+  res.status(404).json({
+    "msn" : " no existe el cliente"
+  });
+})
+});
+
+// menus//////////////////////////////////////////////
+
+router.post("/menus", (req, res) => {
+ var menus = req.body;
+
+ //validar datos
+ if (req.body.name == "" && req.body.price == "" && req.body.property == "" && req.body.description == "") {
+   res.status(400).json({
+     "msn" : "Formato incorrecto"
+   });
+   return;
+}
+ menus["registerdate"] = new Date();
+ var men = new MENUS(menus);
+ men.save().then((docs) => {
+  res.status(200).json(docs);
+ });
+});
+
+// actualizar todo los objetos del menus
+router.put(/menus\/[a-z0-9]{1,}$/, verifytoken,(req, res) => {
+  var url = req.url;
+  var id = url.split("/")[2];
+  var keys = Object.keys(req.body);
+  var oficialkeys = ['name','price', 'property', 'description', 'picture','idrestaurant'];
+  var result = _.difference(oficialkeys, keys);
+  if (result.length > 0){
+    res.status(400).json({
+      "msn" : "existe un error en el formato, use path si decia editar solo un fragmiento"
+    });
+    return;
+  }
+  var user = {
+    name : req.body.name,
+    price : req.body.price,
+    property: req.body.property,
+    description : req.body.description,
+    picture : req.body.picture,
+    idrestaurant : req.body.idrestaurant,
+
+  };
+  MENUS.findOneAndUpdate({_id: id}, user, (err, params)=>{
+    if(err){
+      res.status(500).json({
+        "msn" : "error no se pudo actualizar los datos"
+      });
+      return;
+    }
+    res.status(200).json(params);
+  });
+});
+
+//coleccion de datos actualizacion
+router.patch("/menus",verifytoken ,(req, res) =>{
+  var url = req.url;
+  var params = req.body;
+  var id = req.query.id;
+
+  var keys = Object.keys(params);
+  var updatekeys = ["name", "price", "property","description",  "picture", "idrestaurant"];
+  var newkeys = [];
+  var values = [];
+  //seguridad
+  for (var i = 0; i < updatekeys.length; i++){
+    var index = keys.indexOf(updatekeys[i]);
+    if (index != -1) {
+      newkeys.push(keys[index]);
+      values.push(params[keys[index]]);
+    }
+  }
+  var objupdate = {}
+  for (var i = 0; i < newkeys.length; i++) {
+      objupdate[newkeys[i]] = values[i];
+  }
+  console.log(objupdate);
+  MENUS.findOneAndUpdate({_id: id}, objupdate, (err, docs) => {
+    if (err) {
+      res.status(500)-json({
+        msn: "existe un error en la base de datos"
+      });
+      return;
+    }
+    var id = docs._id
+    res.status(200).json({
+      "msn": id
+    });
+  });
+
+});
+
+// mostrar todo los menus
+router.get("/menus",verifytoken ,(req, res) => {
+  var skip = 0;
+  var limit = 10;
+  if (req.query.skip != null) {
+    skip = req.query.skip;
+  }
+  if (req.query.limit != null) {
+    limit = req.query.limit;
+  }
+MENUS.find({}).skip(skip).limit(limit).exec((err, docs) => {
+if (err) {
+          res.status(500).json({
+            "msn" : "Error en la base de datos"
+          });
+          return;
+        }
+res.status(200).json(docs);
+});
+});
+// mostrar solo un menu`
+
+router.get(/\/menus\/[a-z0-9]{1,}$/,verifytoken,(req, res)=>{
+var url =req.url;
+var id = url.split("/")[2];
+MENUS.findOne({_id: id}).exec( (error, docs)=>{
+  if (docs != null) {
+    res.status(200).json(docs);
+    return;
+  }
+  res.status(404).json({
+    "msn" : " no existe el MENU"
+  });
+})
+});
+
+// eliminar menu
+
+router.delete(/\/menus\/[a-z0-9]{1,}$/,verifytoken,(req, res)=>{
+var url =req.url;
+var id = url.split("/")[2];
+MENUS.find({_id: id}).remove().exec( (error, docs)=>{
+  if (docs != null) {
+    res.status(200).json(docs);
+    return;
+  }
+  res.status(404).json({
+    "msn" : " no existe menu"
+  });
+})
+});
+
+//subis foto de menus
+
+router.post("/picturemenus", verifytoken, (req, res) => {
+  var params = req.query;
+  var id     = params.id;
+  MENUS.findOne({_id: id}).exec((err, docs) =>{
+    if (err) {
+      res.status(501).json({
+        "msn" : "Problema con la base de datos."
+      });
+      return;
+    }
+    if (docs != undefined) {
+      upload(req, res, (err) => {
+        if (err) {
+          res.status(500).json({
+            "msn" : "Error al subir la imagen."
+          });
+        }
+        var url = req.file.path.replace(/public/g, "");
+
+        MENUS.update({_id: id}, {$set:{logo:url}}, (err, docs) => {
+          if(err) {
+            res.status(200).json({
+              "msn" : err
+            });
+          }
+          res.status(200).json(docs);
+        });
+      });
+    }
+  });
+});
+
+
+
 module.exports = router;
