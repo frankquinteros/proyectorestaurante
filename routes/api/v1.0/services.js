@@ -89,7 +89,7 @@ function verifytoken (req, res, next) {
       })
   } else {
       req.token = header.split(" ")[1];
-      jwt.verify(req.token, "secretkey123", (err, authData) => {
+      jwt.verify(req.token, "seponeunallavesecreta", (err, authData) => {
         if (err) {
           res.status(403).json({
             msn: "No autotizado"

@@ -9,11 +9,15 @@
     "body-parser": "~1.18.2",
     "cookie-parser": "~1.4.3",
     "debug": "~2.6.9",
-    "express": "~4.15.5",
+    "express": "^4.16.4",
     "jade": "~1.11.0",
     "jsonwebtoken": "^8.2.1",
     "mongoose": "^5.0.14",
+<<<<<<< HEAD
     "morgan": "~1.9.0",
+=======
+    "morgan": "^1.9.1",
+>>>>>>> 3107f34d94dc1341bc062bed4e53aea5e5c12ae7
     "multer": "^1.4.1",
     "serve-favicon": "~2.4.5",
     "underscore": "^1.8.3"
